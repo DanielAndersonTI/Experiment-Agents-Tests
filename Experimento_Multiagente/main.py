@@ -107,45 +107,31 @@ Spring PetClinic Microservices - Requirements
 BOOKSTORE_REQUIREMENTS = """
 Bookstore Microservices - Requirements
 
-1. Book Catalog Management:
-   - Add, update, and delete books from the catalog.
-   - Search books by title, author, genre, or ISBN.
-   - View book details including price, stock, and description.
+1. Manage Products:
+   - Add, update, and delete product entries.
+   - List available products for purchase.
 
-2. Customer Management:
-   - Register new customers with personal information.
-   - Update customer profiles and preferences.
-   - View customer purchase history.
+2. Manage Shopping Cart:
+   - Add and remove products from the shopping cart.
+   - View items currently in the cart.
 
-3. Order Management:
-   - Create new orders with multiple books.
-   - Track order status (pending, confirmed, shipped, delivered).
-   - Cancel orders before shipment.
+3. Manage Orders:
+   - Create orders from shopping cart items.
+   - View order history and order details.
 
-4. Inventory Management:
-   - Track stock levels for each book.
-   - Receive low-stock alerts.
-   - Update inventory when orders are placed or received.
+4. Manage Payments:
+   - Process payments for completed orders.
 
-5. Shipping Management:
-   - Manage shipping addresses and methods.
-   - Track shipment status and delivery dates.
-   - Calculate shipping costs based on weight and destination.
+5. Manage Deliveries:
+   - Schedule and track delivery of orders.
 
-6. Notification Service:
-   - Send order confirmation emails to customers.
-   - Send shipment updates and delivery notifications.
-   - Send promotional offers and newsletters.
+6. Manage Customers:
+   - Register and authenticate customer accounts.
+   - Update and retrieve customer profile information.
 
-7. API Gateway:
-   - Route client requests to appropriate backend services.
-   - Handle authentication and rate limiting.
-
-8. Service Discovery:
-   - Register and locate services dynamically.
-
-9. Centralized Configuration:
-   - Manage service configurations centrally.
+7. Manage Authentication:
+   - Provide secure authentication and authorization for users.
+   - Integrate with other services to validate credentials and permissions.
 """
 
 
@@ -207,7 +193,8 @@ def salvar_metricas(run_dir: Path, metricas: dict):
             total_gerado = m["tp_count"] + m["fp_count"]
             linhas_inter.append([key.replace("_inter", ""), m["precision"], m["recall"],
                                  m["f1_score"], m["tp_count"], total_gerado,
-                                 ";".join(m["fp"]), ";".join(m["fn"])])
+                                 ";".join(f"{a}-{b}" for a, b in m["fp"]),
+                                 ";".join(f"{a}-{b}" for a, b in m["fn"])])
     if linhas_inter:
         salvar_csv(run_dir / "metricas_interacoes.csv", cab_inter, linhas_inter)
 
@@ -227,6 +214,49 @@ def salvar_sumario_json(run_dir: Path, metricas: dict):
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(resumo, f, indent=2, ensure_ascii=False)
     print(f"  💾 Salvo: {filepath}")
+
+def salvar_relatorio_md(run_dir: Path, system_name: str, metricas: dict):
+    """Gera um relatório Markdown com as métricas e salva no diretório da execução."""
+    linhas = [
+        f"# Relatório de Execução – {system_name}",
+        "",
+        f"**Data/hora:** {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}",
+        "",
+        "## Métricas de Serviços",
+        "",
+        "| Proposta | Precision | Recall | F1‑Score | Match (TP) | Serviços Gerados |",
+        "|----------|-----------|--------|----------|------------|------------------|",
+    ]
+    for key, label in [("proposta_a", "Proposta A (DDD)"),
+                       ("proposta_b", "Proposta B (Alternativa)"),
+                       ("consolidada", "Consolidada")]:
+        m = metricas.get(key)
+        if m and "match_count" in m:
+            linhas.append(f"| {label} | {m['precision']:.4f} | {m['recall']:.4f} | {m['f1_score']:.4f} | {m['match_count']} | {m['generated_count']} |")
+        else:
+            linhas.append(f"| {label} | – | – | – | – | – |")
+
+    linhas += [
+        "",
+        "## Métricas de Interações",
+        "",
+        "| Proposta | Precision | Recall | F1‑Score | TP | Total Gerado |",
+        "|----------|-----------|--------|----------|----|--------------|",
+    ]
+    for key, label in [("proposta_a_inter", "Proposta A (DDD)"),
+                       ("proposta_b_inter", "Proposta B (Alternativa)"),
+                       ("consolidada_inter", "Consolidada")]:
+        m = metricas.get(key)
+        if m:
+            total = m["tp_count"] + m["fp_count"]
+            linhas.append(f"| {label} | {m['precision']:.4f} | {m['recall']:.4f} | {m['f1_score']:.4f} | {m['tp_count']} | {total} |")
+        else:
+            linhas.append(f"| {label} | – | – | – | – | – |")
+
+    filepath = run_dir / "report.md"
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(linhas))
+    print(f"  💾 Relatório salvo: {filepath}")
 
 
 # ============================================
@@ -249,7 +279,8 @@ def parse_csv_architecture(csv_text: str):
                 line.startswith('- ') or
                 line.startswith('#') or
                 line.startswith('--') or
-                line.startswith('**')):
+                line.startswith('**') or
+                line.lower().startswith('thought:')):
                 continue
             parts = [p.strip() for p in line.split(',')]
             # Accept lines with 3 or 4 fields (last field may be Source like "A+B")
@@ -267,33 +298,37 @@ def parse_csv_architecture(csv_text: str):
 # ============================================
 
 PETCLINIC_INTERACTIONS_REFERENCE = {
-    ("api-gateway", "customers-service"),
-    ("api-gateway", "vets-service"),
-    ("api-gateway", "visits-service"),
-    ("api-gateway", "discovery-server"),
-    ("customers-service", "discovery-server"),
-    ("vets-service", "discovery-server"),
-    ("visits-service", "discovery-server"),
-    ("customers-service", "config-server"),
-    ("vets-service", "config-server"),
-    ("visits-service", "config-server"),
-    ("admin-server", "discovery-server"),
+    ("admin-server", "api-gateway"),
     ("admin-server", "config-server"),
     ("admin-server", "customers-service"),
+    ("admin-server", "discovery-server"),
     ("admin-server", "vets-service"),
     ("admin-server", "visits-service"),
-    ("customers-service", "pets-service"),  # se existir no seu dot
+    ("api-gateway", "config-server"),
+    ("api-gateway", "customers-service"),
+    ("api-gateway", "discovery-server"),
+    ("api-gateway", "vets-service"),
+    ("api-gateway", "visits-service"),
+    ("config-server", "customers-service"),
+    ("config-server", "discovery-server"),
+    ("config-server", "vets-service"),
+    ("config-server", "visits-service"),
+    ("customers-service", "discovery-server"),
+    ("customers-service", "visits-service"),
+    ("discovery-server", "vets-service"),
+    ("discovery-server", "visits-service"),
 }
 
 BOOKSTORE_INTERACTIONS_REFERENCE = {
-    ("api-gateway", "book-service"),
-    ("api-gateway", "order-service"),
-    ("api-gateway", "customer-service"),
-    ("api-gateway", "discovery-server"),
-    ("book-service", "discovery-server"),
-    ("order-service", "discovery-server"),
-    ("customer-service", "discovery-server"),
-    # ... completar com base nos arquivos .dot
+    ("auth-service", "customer-service"),
+    ("cart-service", "customer-service"),
+    ("cart-service", "order-service"),
+    ("cart-service", "product-service"),
+    ("customer-service", "order-service"),
+    ("delivery-service", "order-service"),
+    ("order-service", "payment-service"),
+    ("order-service", "product-service"),
+    ("payment-service", "order-service"),
 }
 
 
@@ -381,7 +416,7 @@ PETCLINIC_NAME_MAP = {
     "customers": "customers-service",
     "vets": "vets-service",
     "visits": "visits-service",
-        "clientcommandservice": "customers-service",
+    "clientcommandservice": "customers-service",
     "clientqueryservice": "customers-service",
     "petcommandservice": "pets-service",
     "petqueryservice": "pets-service",
@@ -391,31 +426,86 @@ PETCLINIC_NAME_MAP = {
     "vetqueryservice": "vets-service",
     "eventbus": "discovery-server",   # ou remover se não quiser forçar
     "discoveryservice": "discovery-server",
+    "ownerprofileservice": "customers-service",
+    "ownerdashboardservice": "customers-service",
+    "petcatalogservice": "pets-service",
+    "visitschedulingservice": "visits-service",
+    "vetmanagementservice": "vets-service",
+    "pethistoryservice": "visits-service",
+    "servicediscovery": "discovery-server",
+        # Termos com espaços convertidos para hífen
+    "eureka-server": "discovery-server",
+    "owner": "customers-service",
+    "owner-service": "customers-service",
+    "pet-service": "pets-service",
+    "visit-service": "visits-service",
+    "vet-service": "vets-service",
+    # Infraestrutura alternativa
+    "config-server": "config-server",      # já deve existir, confirme
+    "admin-server": "admin-server",        # idem
+    "api-gateway": "api-gateway",          # idem
+    "service-discovery": "discovery-server",
+    # Agente B / alternativos
+    "eventbroker": "discovery-server",     # ou remova se preferir tratá-lo como extra legítimo
+    "messagebroker": "discovery-server",
+    "apigatewayservice": "api-gateway",
+    "eurekaservice": "discovery-server",
+    "gatewayservice": "api-gateway",
+    "client": "customers-service",
+    "config": "config-server",
+       
 }
 
 BOOKSTORE_NAME_MAP = {
+    # Variações de domínio
+    "authservice": "auth-service",
+    "auth": "auth-service",
+    "cartservice": "cart-service",
+    "cart": "cart-service",
+    "shoppingcartservice": "cart-service",
+    "shopping-cart-service": "cart-service",
+    "shopping-cart": "cart-service",
+    "customerservice": "customer-service",
+    "customer": "customer-service",
+    "deliveryservice": "delivery-service",
+    "delivery": "delivery-service",
+    "deliverymanagementservice": "delivery-service",
+    "delivery-management": "delivery-service",
+    "orderservice": "order-service",
+    "order": "order-service",
+    "orderplacementservice": "order-service",
+    "order-placement": "order-service",
+    "orderqueryservice": "order-service",
+    "order-query": "order-service",
+    "orderfulfillmentservice": "order-service",
+    "order-fulfillment": "order-service",
+    "paymentservice": "payment-service",
+    "payment": "payment-service",
+    "paymentprocessingservice": "payment-service",
+    "payment-processing": "payment-service",
+    "productservice": "product-service",
+    "product": "product-service",
+    "productcatalogservice": "product-service",
+    "product-catalog": "product-service",
+    "bookservice": "product-service",
+    "book": "product-service",
+    # Infraestrutura (não existe na referência, mas normaliza para evitar variações)
     "apigateway": "api-gateway",
     "api-gateway": "api-gateway",
     "gateway": "api-gateway",
     "configserver": "config-server",
-    "config-server": "config-server",
-    "configservice": "config-server",
+    "config-service": "config-server",
+    "config": "config-server",
     "discoveryserver": "discovery-server",
-    "discovery-service": "discovery-server",
+    "service-discovery": "discovery-server",
+    "service-discovery-(eureka)": "discovery-server",
     "discovery": "discovery-server",
-    "bookservice": "book-service",
-    "book": "book-service",
-    "orderservice": "order-service",
-    "order": "order-service",
-    "customerservice": "customer-service",
-    "customer": "customer-service",
-    "inventoryservice": "inventory-service",
-    "inventory": "inventory-service",
-    "shippingservice": "shipping-service",
-    "shipping": "shipping-service",
-    "notificationservice": "notification-service",
-    "notification": "notification-service",
-    "customers": "customer-service",
+    "adminserver": "admin-server",
+    "admin-service": "admin-server",
+    "admin": "admin-server",
+    "eventbroker": "discovery-server",
+    "event-broker": "discovery-server",
+    "authenticationservice": "auth-service",
 }
 
 
@@ -517,15 +607,13 @@ PETCLINIC_REFERENCE = [
 ]
 
 BOOKSTORE_REFERENCE = [
-    "api-gateway",
-    "config-server",
-    "discovery-server",
-    "book-service",
-    "order-service",
+    "auth-service",
+    "cart-service",
     "customer-service",
-    "inventory-service",
-    "shipping-service",
-    "notification-service",
+    "delivery-service",
+    "order-service",
+    "payment-service",
+    "product-service",
 ]
 
 
@@ -622,6 +710,7 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
                     "architecture_a": resultados["proposta_a"],
                     "architecture_b": resultados["proposta_b"],
                 }
+                
             )
             resultados["consolidada"] = str(output_c)
             salvar_proposta(run_dir, "consolidada", str(output_c))
@@ -670,6 +759,7 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
     # Salvar métricas e sumário
     salvar_metricas(run_dir, metricas)
     salvar_sumario_json(run_dir, metricas)
+    salvar_relatorio_md(run_dir, system_name, metricas)
 
     # --- Comparação Final ---
     print(f"\n{'█'*70}")

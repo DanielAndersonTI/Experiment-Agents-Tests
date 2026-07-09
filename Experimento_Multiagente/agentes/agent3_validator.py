@@ -57,36 +57,34 @@ def criar_agente3(llm):
 
 
 def criar_task_consolidacao(agente):
-    """
-    Cria a Task para consolidar duas propostas de arquitetura
-    
-    Args:
-        agente: O agente que executará a task (Validator)
-    
-    Returns:
-        Task: Task CrewAI configurada
-    """
     task = Task(
         description="""
         Compare the two architecture proposals below and generate a consolidated version.
-        
+
+        IMPORTANT RULES FOR CONSOLIDATION:
+        - Prefer services that appear in BOTH proposals (they are highly likely to be correct).
+        - If a service appears in only one proposal, include it ONLY if it is clearly grounded in the requirements.
+        - Do NOT add new services that were not in either proposal.
+        - Do NOT add infrastructure services (gateway, config, discovery, admin) unless they are present in BOTH proposals.
+        - Choose the simplest, most generic service name when merging similar services.
+        - Aim to maximize precision: only include services that are necessary to cover the requirements.
+
         ARCHITECTURE A (Traditional DDD approach):
         {architecture_a}
-        
+
         ARCHITECTURE B (Alternative approach):
         {architecture_b}
-        
+
         Your output MUST be in this format:
-        
         === CONSOLIDATED ARCHITECTURE ===
         Microservice,Responsibilities,Communicates With,Source
         Service Name,resp1;resp2,ServiceX;ServiceY,A+B
-        
+
         === DECISIONS ===
         - Service X: Kept from both proposals because...
         - Service Y: Merged from A's name and B's responsibilities because...
         - Service Z: Added from B only because...
-        
+
         Rules:
         - Include a 'Source' column indicating where each service came from (A, B, or A+B)
         - Explain key decisions

@@ -26,15 +26,13 @@ def criar_agente1(llm):
         role="Software Architect",
         goal="""
         Propor uma arquitetura de microsserviços baseada em requisitos textuais.
-        
+        Inclua SOMENTE serviços explicitamente descritos nos requisitos funcionais.
+        Não adicione infraestrutura (gateway, discovery, config, admin) a menos que seja um requisito explícito.
+
         Para cada microsserviço, você deve:
         1. Identificar um nome descritivo baseado em responsabilidades de negócio
         2. Listar as responsabilidades principais
         3. Especificar quais outros serviços ele se comunica
-
-        IMPORTANTE: Inclua SEMPRE os serviços de infraestrutura mencionados nos requisitos,
-        como API Gateway, Service Discovery (Eureka), Config Server e Admin Server,
-        além dos serviços de domínio.
 
         Use princípios de Domain Driven Design (DDD) e bounded contexts.
         """,
@@ -70,9 +68,6 @@ def criar_task_arquitetura(agente):
     task = Task(
         description="""
         Analyze the following system requirements and propose a microservices architecture.
-
-        You MUST include ALL services mentioned in the requirements, including infrastructure services
-        (API Gateway, Service Discovery, Config Server, Admin Server) and domain services.
         
         Your output MUST be EXACTLY in this CSV format (no markdown, no explanations):
         
@@ -85,7 +80,7 @@ def criar_task_arquitetura(agente):
         - NO markdown formatting, NO headers, NO extra text
         - List services in a logical order
         - Consider DDD bounded contexts
-        - INCLUDE ALL infrastructure services (gateway, discovery, config, admin)
+        - Include ONLY the services explicitly described in the requirements — do NOT add infrastructure unless it is a functional requirement.
         
         System Requirements:
         {requirements}
