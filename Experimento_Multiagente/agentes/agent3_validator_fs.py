@@ -46,14 +46,14 @@ def criar_task_consolidacao(agente):
         Compare the two architecture proposals below and generate a consolidated version.
 
         IMPORTANT RULES FOR CONSOLIDATION:
-        - Prefer services that appear in BOTH proposals (they are highly likely to be correct).
-        - If a service appears in only one proposal, include it ONLY if it is clearly grounded in the requirements.
-        - Do NOT add new services that were not in either proposal.
-        - Do NOT add infrastructure services (gateway, config, discovery, admin) unless they are present in BOTH proposals.
+        - Start with ALL services and interactions from Architecture A (the DDD approach). Architecture A has shown higher precision.
+        - Then, consider each service from Architecture B. Add a service from B ONLY if:
+            a) it is also present in Architecture A (consensus), OR
+            b) it is explicitly mentioned in the requirements AND does NOT introduce infrastructure (gateway, config, discovery, admin, broker).
+        - For interactions, keep all interactions from Architecture A.
+        - Add an interaction from Architecture B ONLY if both involved services are already in the consolidated architecture AND the interaction is clearly grounded in the requirements.
+        - Do NOT add infrastructure services (gateway, config, discovery, admin, broker) unless they are present in BOTH proposals.
         - Choose the simplest, most generic service name when merging similar services.
-        - Aim to maximize precision: only include services that are necessary to cover the requirements.
-        - If the intersection of services between both proposals contains fewer than 3 services,
-          discard Architecture B and adopt Architecture A entirely.
 
         ARCHITECTURE A (Traditional DDD approach):
         {architecture_a}
