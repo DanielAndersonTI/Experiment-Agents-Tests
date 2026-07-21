@@ -48,26 +48,26 @@ def carregar_config():
         load_dotenv()
         print("⚠ .env não encontrado, usando variáveis do sistema")
 
-    api_key = os.getenv("GOOGLE_API_KEY")
-    model_name = os.getenv("GOOGLE_MODEL", "gemini-2.5-flash")
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    model_name = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 
     if not api_key:
-        print("✗ ERRO: GOOGLE_API_KEY não configurada!")
-        print("  Copie .env.example para .env e adicione sua chave.")
+        print("✗ ERRO: OPENROUTER_API_KEY não configurada!")
+        print("  Copie .env.example para .env e adicione sua chave do OpenRouter.")
         sys.exit(1)
 
     return api_key, model_name
 
 
 def criar_llm(api_key: str, model_name: str) -> LLM:
-    """Cria o modelo LLM usando CrewAI"""
-    print(f"\n🔧 Inicializando modelo: {model_name}")
+    """Cria o modelo LLM usando CrewAI com OpenRouter"""
+    print(f"\n🔧 Inicializando modelo via OpenRouter: {model_name}")
     llm = LLM(
-        model=f"gemini/{model_name}",
+        model=f"openrouter/{model_name}",
         api_key=api_key,
         temperature=0.3,
     )
-    print(f"✓ Modelo {model_name} inicializado com sucesso")
+    print(f"✓ Modelo {model_name} inicializado com sucesso via OpenRouter")
     return llm
 
 

@@ -18,11 +18,11 @@ from agentes.agent1_architect_a import criar_agente1, criar_task_arquitetura
 env_path = Path(__file__).parent / '.env'
 load_dotenv(env_path)
 
-api_key = os.getenv("GOOGLE_API_KEY")
-model_name = os.getenv("GOOGLE_MODEL", "gemini-2.5-flash")
+api_key = os.getenv("OPENROUTER_API_KEY")
+model_name = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 
 if not api_key:
-    print("ERRO: GOOGLE_API_KEY nao configurada!")
+    print("ERRO: OPENROUTER_API_KEY nao configurada!")
     sys.exit(1)
 
 print("="*60)
@@ -33,7 +33,7 @@ print("="*60)
 # Criar LLM
 print(f"\n[OK] Inicializando modelo: {model_name}")
 llm = LLM(
-    model=f"gemini/{model_name}",
+    model=f"openrouter/{model_name}",
     api_key=api_key,
     temperature=0.3,
 )

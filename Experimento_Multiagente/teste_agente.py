@@ -1,8 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-from crewai import Agent, Task, Crew
-from langchain_google_genai import ChatGoogleGenerativeAI
+from crewai import Agent, Task, Crew, LLM
 
 
 # Carrega variáveis do .env
@@ -10,18 +9,19 @@ load_dotenv()
 
 
 # Verifica API KEY
-api_key = os.getenv("GOOGLE_API_KEY")
+api_key = os.getenv("OPENROUTER_API_KEY")
+model_name = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 
 if not api_key:
-    raise Exception("GOOGLE_API_KEY não encontrada no arquivo .env")
+    raise Exception("OPENROUTER_API_KEY não encontrada no arquivo .env")
 
-print("✓ API KEY encontrada")
+print("✓ API KEY do OpenRouter encontrada")
 
 
-# Configura Gemini
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=api_key,
+# Configura LLM via OpenRouter
+llm = LLM(
+    model=f"openrouter/{model_name}",
+    api_key=api_key,
     temperature=0.2
 )
 

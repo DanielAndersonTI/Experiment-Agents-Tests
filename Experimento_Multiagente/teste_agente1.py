@@ -7,14 +7,15 @@ from agentes.agent1 import criar_agente1
 
 load_dotenv()
 
-api_key = os.getenv("GOOGLE_API_KEY")
+api_key = os.getenv("OPENROUTER_API_KEY")
+model_name = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
 
 if not api_key:
-    raise Exception("GOOGLE_API_KEY não encontrada")
+    raise Exception("OPENROUTER_API_KEY não encontrada")
 
 
 llm = LLM(
-    model="gemini/gemini-2.5-flash",
+    model=f"openrouter/{model_name}",
     api_key=api_key,
     temperature=0.2
 )
