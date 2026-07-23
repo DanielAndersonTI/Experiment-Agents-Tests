@@ -284,3 +284,19 @@ The final pipeline delivers perfect accuracy on the Bookstore system and industr
 - Extend the pipeline with a fourth "reviewer" agent that critiques architectures before finalization.
 - Explore human-in-the-loop refinement cycles.
 - Test on additional industrial systems and non-English requirements.
+
+## 9. Tasks Required for Replication
+
+1. Gain a detailed understanding of the target systems, including their functional requirements, reference architectures, or any other aspect you intend to investigate.
+
+2. Define a structured output format (e.g., CSV) and establish the evaluation metrics (Precision, Recall, and F1-score).
+
+3. Design specialized agents for each intended objective, along with a consolidator. For example, use a conservative architect (DDD) to identify services, a communication specialist to map interactions, and a validator to asymmetrically consolidate the proposed architectures. Each agent should be carefully optimized for its specific role within the system, using few-shot prompts, clearly defined goals, and well-specified tasks.
+
+4. Develop a `main` script that acts as the central orchestrator by loading configurations, instantiating agents, executing tasks sequentially, applying output post-processing, and computing evaluation metrics. This script is responsible for coordinating and executing all agents.
+
+5. Build synonym dictionaries for name normalization and prepare reference interaction datasets without duplicates, which will be incorporated into the `main` script.
+
+6. Perform fine-tuning through isolated system-level testing, adopt conditional rather than absolute rules, and validate stability through multiple execution runs.
+
+7. Document and make all artifacts publicly available—including requirements, prompts, outputs, and scripts—to ensure traceability and reproducibility.
