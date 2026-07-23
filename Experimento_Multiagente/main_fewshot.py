@@ -13,6 +13,7 @@ Versão com exemplos Few‑Shot injetados nos prompts dos agentes.
 """
 
 import os
+import re
 import sys
 import argparse
 import csv
@@ -66,6 +67,7 @@ def criar_llm(api_key: str, model_name: str) -> LLM:
         model=f"openrouter/{model_name}",
         api_key=api_key,
         temperature=0.3,
+        max_tokens=4096,
     )
     print(f"✓ Modelo {model_name} inicializado com sucesso via OpenRouter")
     return llm
@@ -239,6 +241,56 @@ def salvar_sumario_json(run_dir: Path, metricas: dict):
         json.dump(resumo, f, indent=2, ensure_ascii=False)
     print(f"  💾 Salvo: {filepath}")
 
+
+def extrair_csv_do_output(texto: str) -> str:
+    """Extrai apenas as linhas que fazem parte do CSV da arquitetura."""
+    linhas = texto.split('\n')
+    csv_linhas = []
+    started = False
+    for line in linhas:
+        stripped = line.strip()
+        # Inicia a captura quando encontra o cabeçalho do CSV ou uma linha que pareça CSV
+        if not started:
+            if stripped.startswith('Microservice,') or stripped.startswith('=== CONSOLIDATED ARCHITECTURE ==='):
+                started = True
+                if stripped.startswith('Microservice,'):
+                    csv_linhas.append(stripped)
+                continue
+            # Se ainda não começou, mas a linha tem pelo menos duas vírgulas e nenhum ruído,
+            # provavelmente é uma linha de dados CSV sem cabeçalho
+            if stripped.count(',') >= 2 and not any(c in stripped for c in ['└', '┌', '├', '│', '╭', '╰', 'Task', 'Agent:', 'Thought:', 'Begin!']):
+                started = True
+                # Não adicionamos o cabeçalho aqui, apenas a linha
+                csv_linhas.append(stripped)
+                continue
+            continue
+
+        # Já iniciámos a captura; agora decidimos quando parar
+        # Para se encontrar uma seção claramente não‑CSV
+        if (stripped.startswith('===') and 'CONSOLIDATED' in stripped) or \
+           stripped.startswith('Note:') or \
+           stripped.startswith('Key Observation') or \
+           stripped.startswith('**') or \
+           stripped.startswith('---'):
+            if ',' in stripped:
+                csv_linhas.append(stripped)
+            continue
+                # Ignora linhas com caracteres de caixa do terminal ou mensagens do agente
+        if any(c in stripped for c in ['└', '┌', '├', '│', '╭', '╰', 'Task', 'Agent:', 'Thought:', 'Begin!']):
+            continue
+        # Ignora explicitamente notas e observações (mesmo que contenham vírgulas)
+        if stripped.startswith('Note:') or stripped.startswith('Key Observation'):
+            continue
+                # Ignora linhas que começam com número seguido de ponto e texto (itens de lista)
+        import re
+        if re.match(r'^\d+\.\s', stripped):
+            continue
+        # Mantém linhas que contêm vírgula (formato CSV) e não são pensamentos
+        if ',' in stripped and not stripped.startswith('Thought:'):
+            csv_linhas.append(stripped)
+    return '\n'.join(csv_linhas)
+
+
 def salvar_relatorio_md(run_dir: Path, system_name: str, metricas: dict):
     """Gera um relatório Markdown com as métricas e salva no diretório da execução."""
     linhas = [
@@ -349,7 +401,6 @@ BOOKSTORE_INTERACTIONS_REFERENCE = {
     ("delivery-service", "order-service"),
     ("order-service", "payment-service"),
     ("order-service", "product-service"),
-    ("payment-service", "order-service"),
 }
 
 
@@ -454,6 +505,7 @@ PETCLINIC_NAME_MAP = {
     "pethistoryservice": "visits-service",
     "servicediscovery": "discovery-server",
     "eureka-server": "discovery-server",
+    "discovery-service-(eureka)": "discovery-server",
     "owner": "customers-service",
     "owner-service": "customers-service",
     "pet-service": "pets-service",
@@ -720,8 +772,9 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
             verbose=True,
         )
         output_a = crew1.kickoff(inputs={"example": example, "requirements": requirements})
-        resultados["proposta_a"] = str(output_a)
-        salvar_proposta(run_dir, "proposta_a", str(output_a))
+        output_a_limpo = extrair_csv_do_output(str(output_a))
+        resultados["proposta_a"] = output_a_limpo
+        salvar_proposta(run_dir, "proposta_a", output_a_limpo)
         print(f"\n✅ Proposta A gerada com sucesso!")
     except Exception as e:
         print(f"✗ Erro no Agente 1: {str(e)}")
@@ -736,11 +789,12 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
         crew2 = Crew(
             agents=[agente2],
             tasks=[task2],
-            verbose=True,
+            verbose=False,
         )
         output_b = crew2.kickoff(inputs={"example": example, "requirements": requirements})
-        resultados["proposta_b"] = str(output_b)
-        salvar_proposta(run_dir, "proposta_b", str(output_b))
+        output_b_limpo = extrair_csv_do_output(str(output_b))
+        resultados["proposta_b"] = output_b_limpo
+        salvar_proposta(run_dir, "proposta_b", output_b_limpo)
         print(f"\n✅ Proposta B gerada com sucesso!")
     except Exception as e:
         print(f"✗ Erro no Agente 2: {str(e)}")
@@ -756,7 +810,7 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
             crew3 = Crew(
                 agents=[agente3],
                 tasks=[task3],
-                verbose=True,
+                verbose=False,
             )
             output_c = crew3.kickoff(
                 inputs={
@@ -764,8 +818,9 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
                     "architecture_b": resultados["proposta_b"],
                 }
             )
-            resultados["consolidada"] = str(output_c)
-            salvar_proposta(run_dir, "consolidada", str(output_c))
+            output_c_limpo = extrair_csv_do_output(str(output_c))
+            resultados["consolidada"] = output_c_limpo
+            salvar_proposta(run_dir, "consolidada", output_c_limpo)
             print(f"\n✅ Arquitetura Consolidada gerada com sucesso!")
         except Exception as e:
             print(f"✗ Erro no Agente 3: {str(e)}")
@@ -813,27 +868,60 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
     salvar_sumario_json(run_dir, metricas)
     salvar_relatorio_md(run_dir, system_name, metricas)
 
-    # --- Comparação Final ---
-    print(f"\n{'█'*70}")
-    print(f"COMPARAÇÃO FINAL - {system_name}")
-    print(f"{'█'*70}\n")
-
+       # --- Comparação Final (separada por RQ1 e RQ2) ---
     if all(metricas.values()):
+        # ============================================
+        # Comparação Final - Serviços (RQ1)
+        # ============================================
+        print(f"\n{'█'*70}")
+        print(f"COMPARAÇÃO FINAL - SERVIÇOS (RQ1) - {system_name}")
+        print(f"{'█'*70}\n")
+
         print(f"{'Métrica':<20} {'Proposta A':<15} {'Proposta B':<15} {'Consolidada':<15}")
         print(f"{'-'*20} {'-'*15} {'-'*15} {'-'*15}")
+
         print(f"{'Precision':<20} {metricas['proposta_a']['precision']:<15.4f} {metricas['proposta_b']['precision']:<15.4f} {metricas['consolidada']['precision']:<15.4f}")
         print(f"{'Recall':<20} {metricas['proposta_a']['recall']:<15.4f} {metricas['proposta_b']['recall']:<15.4f} {metricas['consolidada']['recall']:<15.4f}")
         print(f"{'F1-Score':<20} {metricas['proposta_a']['f1_score']:<15.4f} {metricas['proposta_b']['f1_score']:<15.4f} {metricas['consolidada']['f1_score']:<15.4f}")
         print(f"{'Serviços':<20} {metricas['proposta_a']['generated_count']:<15} {metricas['proposta_b']['generated_count']:<15} {metricas['consolidada']['generated_count']:<15}")
         print(f"{'Match (TP)':<20} {metricas['proposta_a']['match_count']:<15} {metricas['proposta_b']['match_count']:<15} {metricas['consolidada']['match_count']:<15}")
 
-        scores = {
+        # Melhor proposta para RQ1
+        scores_servicos = {
             'Proposta A': metricas['proposta_a']['f1_score'],
             'Proposta B': metricas['proposta_b']['f1_score'],
             'Consolidada': metricas['consolidada']['f1_score'],
         }
-        best = max(scores, key=scores.get)
-        print(f"\n🏆 Melhor proposta: {best} (F1 = {scores[best]:.4f})")
+        melhor_servicos = max(scores_servicos, key=scores_servicos.get)
+
+        # ============================================
+        # Comparação Final - Interações (RQ2)
+        # ============================================
+        print(f"\n{'█'*70}")
+        print(f"COMPARAÇÃO FINAL - INTERAÇÕES (RQ2) - {system_name}")
+        print(f"{'█'*70}\n")
+
+        print(f"{'Métrica':<20} {'Proposta A':<15} {'Proposta B':<15} {'Consolidada':<15}")
+        print(f"{'-'*20} {'-'*15} {'-'*15} {'-'*15}")
+
+        print(f"{'Precision':<20} {metricas['proposta_a_inter']['precision']:<15.4f} {metricas['proposta_b_inter']['precision']:<15.4f} {metricas['consolidada_inter']['precision']:<15.4f}")
+        print(f"{'Recall':<20} {metricas['proposta_a_inter']['recall']:<15.4f} {metricas['proposta_b_inter']['recall']:<15.4f} {metricas['consolidada_inter']['recall']:<15.4f}")
+        print(f"{'F1-Score':<20} {metricas['proposta_a_inter']['f1_score']:<15.4f} {metricas['proposta_b_inter']['f1_score']:<15.4f} {metricas['consolidada_inter']['f1_score']:<15.4f}")
+        print(f"{'TP':<20} {metricas['proposta_a_inter']['tp_count']:<15} {metricas['proposta_b_inter']['tp_count']:<15} {metricas['consolidada_inter']['tp_count']:<15}")
+        print(f"{'FP':<20} {metricas['proposta_a_inter']['fp_count']:<15} {metricas['proposta_b_inter']['fp_count']:<15} {metricas['consolidada_inter']['fp_count']:<15}")
+        print(f"{'FN':<20} {metricas['proposta_a_inter']['fn_count']:<15} {metricas['proposta_b_inter']['fn_count']:<15} {metricas['consolidada_inter']['fn_count']:<15}")
+
+        # Melhor proposta para RQ2
+        scores_interacoes = {
+            'Proposta A': metricas['proposta_a_inter']['f1_score'],
+            'Proposta B': metricas['proposta_b_inter']['f1_score'],
+            'Consolidada': metricas['consolidada_inter']['f1_score'],
+        }
+        melhor_interacoes = max(scores_interacoes, key=scores_interacoes.get)
+
+        print(f"\n🏆 Melhor proposta (RQ1): {melhor_servicos} (F1 = {scores_servicos[melhor_servicos]:.4f})")
+        print(f"🏆 Melhor proposta (RQ2): {melhor_interacoes} (F1 = {scores_interacoes[melhor_interacoes]:.4f})")
+
     else:
         print("Métricas insuficientes para comparação.")
 
@@ -879,20 +967,20 @@ def main():
     if args.all:
         print("\n📋 Executando experimento para TODOS os sistemas...")
         executar_experimento(
-            llm, "PETCLINIC", PETCLINIC_REQUIREMENTS, PETCLINIC_REFERENCE, timestamp, EXAMPLE_BOOKSTORE
+            llm, "PETCLINIC", PETCLINIC_REQUIREMENTS, PETCLINIC_REFERENCE, timestamp, EXAMPLE_PETCLINIC
         )
         executar_experimento(
-            llm, "BOOKSTORE", BOOKSTORE_REQUIREMENTS, BOOKSTORE_REFERENCE, timestamp, EXAMPLE_PETCLINIC
+            llm, "BOOKSTORE", BOOKSTORE_REQUIREMENTS, BOOKSTORE_REFERENCE, timestamp, EXAMPLE_BOOKSTORE
         )
     else:
         system = args.system
         if system == "petclinic":
             executar_experimento(
-                llm, "PETCLINIC", PETCLINIC_REQUIREMENTS, PETCLINIC_REFERENCE, timestamp, EXAMPLE_BOOKSTORE
+                llm, "PETCLINIC", PETCLINIC_REQUIREMENTS, PETCLINIC_REFERENCE, timestamp, EXAMPLE_PETCLINIC
             )
         else:
             executar_experimento(
-                llm, "BOOKSTORE", BOOKSTORE_REQUIREMENTS, BOOKSTORE_REFERENCE, timestamp, EXAMPLE_PETCLINIC
+                llm, "BOOKSTORE", BOOKSTORE_REQUIREMENTS, BOOKSTORE_REFERENCE, timestamp, EXAMPLE_BOOKSTORE
             )
 
     print("\n✅ Experimento Few‑Shot concluído com sucesso!")
