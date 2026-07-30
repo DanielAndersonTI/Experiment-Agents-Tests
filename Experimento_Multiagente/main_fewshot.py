@@ -30,7 +30,7 @@ from crewai import LLM, Crew
 from agentes.agent1_architect_a_fs import criar_agente1, criar_task_arquitetura
 from agentes.agent2_architect_b_fs import criar_agente2, criar_task_arquitetura_alternativa
 from agentes.agent3_validator_fs import criar_agente3, criar_task_consolidacao
-
+from agentes.agent4_refiner_fs import criar_agente4, criar_task_refinamento
 
 # ============================================
 # Configuração
@@ -39,37 +39,33 @@ from agentes.agent3_validator_fs import criar_agente3, criar_task_consolidacao
 RESULTS_ROOT = Path("result")
 
 
-def carregar_config():
-    """Carrega variáveis de ambiente do arquivo .env"""
+# ============================================
+# Função de criação do LLM para Google Gemini (ATIVA)
+# ============================================
+def criar_llm() -> LLM:
+    """Cria o modelo LLM usando Google Gemini (API paga)"""
+    # Carrega o .env para garantir que a variável GOOGLE_API_KEY esteja disponível
     env_path = Path(__file__).parent / '.env'
     if env_path.exists():
         load_dotenv(env_path)
-        print(f"✓ .env carregado de: {env_path}")
     else:
         load_dotenv()
-        print("⚠ .env não encontrado, usando variáveis do sistema")
 
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    model_name = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-chat-v3-0324:free")
-
+    api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("✗ ERRO: OPENROUTER_API_KEY não configurada!")
-        print("  Copie .env.example para .env e adicione sua chave do OpenRouter.")
+        print("✗ ERRO: GOOGLE_API_KEY não configurada!")
+        print("  Defina GOOGLE_API_KEY no arquivo .env ou como variável de ambiente.")
         sys.exit(1)
 
-    return api_key, model_name
-
-
-def criar_llm(api_key: str, model_name: str) -> LLM:
-    """Cria o modelo LLM usando CrewAI com OpenRouter"""
-    print(f"\n🔧 Inicializando modelo via OpenRouter: {model_name}")
+    model_name = "gemini/gemini-flash-latest"
+    print(f"\n🔧 Inicializando modelo Gemini: {model_name}")
     llm = LLM(
-        model=f"openrouter/{model_name}",
+        model=model_name,
         api_key=api_key,
-        temperature=0.3,
+        temperature=0.0,
         max_tokens=4096,
     )
-    print(f"✓ Modelo {model_name} inicializado com sucesso via OpenRouter")
+    print(f"✓ Modelo {model_name} inicializado com sucesso")
     return llm
 
 
@@ -143,14 +139,13 @@ Bookstore Microservices - Requirements
 # NOVO: Exemplos Few‑Shot (extraídos do artigo original)
 # ============================================================
 
-EXAMPLE_PETCLINIC = """Client Service,Add clients;Update clients;Delete clients;View client details,Pet Service;Visit Service
-Pet Service,Add pets;Update pets;Delete pets;Link pets to owners,Client Service;Visit Service
-Visit Service,Register pet visits;View visit history,Pet Service;Client Service
+EXAMPLE_PETCLINIC = """Client Service,Add clients;Update clients;Delete clients;View client details;Add pets;Update pets;Delete pets;Link pets to owners,Visit Service
+Visit Service,Register pet visits;View visit history,Client Service
 Vet Service,Add veterinarians;Update veterinarians;Delete veterinarians;View vet specialties,
-Discovery Service (Eureka),Register services;Provide service discovery,Client Service;Pet Service;Visit Service;Vet Service;Config Service;API Gateway;Admin Server
-Config Service,Store centralized configurations;Serve configurations to services,Client Service;Pet Service;Visit Service;Vet Service;API Gateway;Discovery Service;Admin Server
-API Gateway,Route client requests;Handle cross-cutting concerns;Forward requests to backend services,Client Service;Pet Service;Visit Service;Vet Service;Discovery Service
-Admin Server,Monitor services;Provide administration dashboard,Client Service;Pet Service;Visit Service;Vet Service;Discovery Service;Config Service;API Gateway"""
+Discovery Service (Eureka),Register services;Provide service discovery,Client Service;Visit Service;Vet Service;Config Service;API Gateway;Admin Server
+Config Service,Store centralized configurations;Serve configurations to services,Client Service;Visit Service;Vet Service;API Gateway;Discovery Service;Admin Server
+API Gateway,Route client requests;Handle cross-cutting concerns;Forward requests to backend services,Client Service;Visit Service;Vet Service;Discovery Service
+Admin Server,Monitor services;Provide administration dashboard,Client Service;Visit Service;Vet Service;Discovery Service;Config Service;API Gateway"""
 
 EXAMPLE_BOOKSTORE = """Auth Service,Register customer accounts;Authenticate customers,Customer Service
 Customer Service,Store customer profiles;Update customer profiles;Retrieve customer profiles,Auth Service;Order Service;Cart Service
@@ -249,24 +244,18 @@ def extrair_csv_do_output(texto: str) -> str:
     started = False
     for line in linhas:
         stripped = line.strip()
-        # Inicia a captura quando encontra o cabeçalho do CSV ou uma linha que pareça CSV
         if not started:
             if stripped.startswith('Microservice,') or stripped.startswith('=== CONSOLIDATED ARCHITECTURE ==='):
                 started = True
                 if stripped.startswith('Microservice,'):
                     csv_linhas.append(stripped)
                 continue
-            # Se ainda não começou, mas a linha tem pelo menos duas vírgulas e nenhum ruído,
-            # provavelmente é uma linha de dados CSV sem cabeçalho
             if stripped.count(',') >= 2 and not any(c in stripped for c in ['└', '┌', '├', '│', '╭', '╰', 'Task', 'Agent:', 'Thought:', 'Begin!']):
                 started = True
-                # Não adicionamos o cabeçalho aqui, apenas a linha
                 csv_linhas.append(stripped)
                 continue
             continue
 
-        # Já iniciámos a captura; agora decidimos quando parar
-        # Para se encontrar uma seção claramente não‑CSV
         if (stripped.startswith('===') and 'CONSOLIDATED' in stripped) or \
            stripped.startswith('Note:') or \
            stripped.startswith('Key Observation') or \
@@ -275,17 +264,13 @@ def extrair_csv_do_output(texto: str) -> str:
             if ',' in stripped:
                 csv_linhas.append(stripped)
             continue
-                # Ignora linhas com caracteres de caixa do terminal ou mensagens do agente
         if any(c in stripped for c in ['└', '┌', '├', '│', '╭', '╰', 'Task', 'Agent:', 'Thought:', 'Begin!']):
             continue
-        # Ignora explicitamente notas e observações (mesmo que contenham vírgulas)
         if stripped.startswith('Note:') or stripped.startswith('Key Observation'):
             continue
-                # Ignora linhas que começam com número seguido de ponto e texto (itens de lista)
         import re
         if re.match(r'^\d+\.\s', stripped):
             continue
-        # Mantém linhas que contêm vírgula (formato CSV) e não são pensamentos
         if ',' in stripped and not stripped.startswith('Thought:'):
             csv_linhas.append(stripped)
     return '\n'.join(csv_linhas)
@@ -747,15 +732,18 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
     agente1 = criar_agente1(llm)
     agente2 = criar_agente2(llm)
     agente3 = criar_agente3(llm)
+    agente4 = criar_agente4(llm)
     print(f"  ✓ {agente1.role}")
     print(f"  ✓ {agente2.role}")
     print(f"  ✓ {agente3.role}")
+    print(f"  ✓ {agente4.role}")
 
     # --- Criar Tasks ---
     print("\n📝 CRIANDO TASKS...")
     task1 = criar_task_arquitetura(agente1)
     task2 = criar_task_arquitetura_alternativa(agente2)
     task3 = criar_task_consolidacao(agente3)
+    task4 = criar_task_refinamento(agente4)
     print("  ✓ Tasks criadas")
 
     resultados = {}
@@ -773,6 +761,33 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
         )
         output_a = crew1.kickoff(inputs={"example": example, "requirements": requirements})
         output_a_limpo = extrair_csv_do_output(str(output_a))
+        original_a = output_a_limpo   # guarda a versão original
+
+        # --- Refinamento da Proposta A (Agente 4) ---
+        try:
+            crew4a = Crew(
+                agents=[agente4],
+                tasks=[task4],
+                verbose=False,
+            )
+            refined_a = crew4a.kickoff(inputs={
+                "original_architecture": output_a_limpo,
+                "requirements": requirements
+            })
+            output_a_limpo = extrair_csv_do_output(str(refined_a))
+            
+            # Verificar se o Agente 4 não removeu serviços válidos
+            refined_services = set(parse_csv_architecture(output_a_limpo))
+            original_services = set(parse_csv_architecture(original_a))
+            if original_services - refined_services:
+                print("⚠ Agente 4 removeu serviços válidos – revertendo para original")
+                output_a_limpo = original_a
+            else:
+                print("  ✓ Proposta A refinada pelo Agente 4")
+        except Exception as e:
+            print(f"  ⚠ Agente 4 falhou para A: {e} – mantendo versão original")
+            output_a_limpo = original_a
+        
         resultados["proposta_a"] = output_a_limpo
         salvar_proposta(run_dir, "proposta_a", output_a_limpo)
         print(f"\n✅ Proposta A gerada com sucesso!")
@@ -793,6 +808,33 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
         )
         output_b = crew2.kickoff(inputs={"example": example, "requirements": requirements})
         output_b_limpo = extrair_csv_do_output(str(output_b))
+        original_b = output_b_limpo   # guarda a versão original
+
+        # --- Refinamento da Proposta B (Agente 4) ---
+        try:
+            crew4b = Crew(
+                agents=[agente4],
+                tasks=[task4],
+                verbose=False,
+            )
+            refined_b = crew4b.kickoff(inputs={
+                "original_architecture": output_b_limpo,
+                "requirements": requirements
+            })
+            output_b_limpo = extrair_csv_do_output(str(refined_b))
+            
+            # Verificar se o Agente 4 não removeu serviços válidos
+            refined_services = set(parse_csv_architecture(output_b_limpo))
+            original_services = set(parse_csv_architecture(original_b))
+            if original_services - refined_services:
+                print("⚠ Agente 4 removeu serviços válidos – revertendo para original")
+                output_b_limpo = original_b
+            else:
+                print("  ✓ Proposta B refinada pelo Agente 4")
+        except Exception as e:
+            print(f"  ⚠ Agente 4 falhou para B: {e} – mantendo versão original")
+            output_b_limpo = original_b
+        
         resultados["proposta_b"] = output_b_limpo
         salvar_proposta(run_dir, "proposta_b", output_b_limpo)
         print(f"\n✅ Proposta B gerada com sucesso!")
@@ -819,12 +861,21 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
                 }
             )
             output_c_limpo = extrair_csv_do_output(str(output_c))
+            
+            # Fallback: se a saída não tiver pelo menos 2 linhas de serviço, usa Proposta A
+            linhas = [l for l in output_c_limpo.split('\n') if l.strip() and not l.startswith('===')]
+            if len(linhas) < 2:
+                print("⚠ Saída do Agente 3 inválida, usando Proposta A como consolidada.")
+                output_c_limpo = resultados["proposta_a"]
+            
             resultados["consolidada"] = output_c_limpo
             salvar_proposta(run_dir, "consolidada", output_c_limpo)
             print(f"\n✅ Arquitetura Consolidada gerada com sucesso!")
         except Exception as e:
             print(f"✗ Erro no Agente 3: {str(e)}")
-            resultados["consolidada"] = None
+            print("⚠ Usando Proposta A como consolidada (fallback por exceção).")
+            resultados["consolidada"] = resultados["proposta_a"]
+            salvar_proposta(run_dir, "consolidada", resultados["proposta_a"])
     else:
         print("\n⚠ Propostas A e/ou B não disponíveis. Pulando consolidação.")
         resultados["consolidada"] = None
@@ -868,7 +919,7 @@ def executar_experimento(llm, system_name: str, requirements: str, reference_ser
     salvar_sumario_json(run_dir, metricas)
     salvar_relatorio_md(run_dir, system_name, metricas)
 
-       # --- Comparação Final (separada por RQ1 e RQ2) ---
+    # --- Comparação Final (separada por RQ1 e RQ2) ---
     if all(metricas.values()):
         # ============================================
         # Comparação Final - Serviços (RQ1)
@@ -950,15 +1001,21 @@ def main():
     )
     args = parser.parse_args()
 
-    # Carregar configuração
+    # =========================================================
+    # Modo Gemini (ATIVO) - ignora carregar_config
+    # =========================================================
     print("="*60)
     print("MULTIAGENT ARCHITECTURE GENERATION (FEW‑SHOT)")
     print("="*60)
-    print("\n⚙️  Carregando configuração...")
-    api_key, model_name = carregar_config()
 
-    # Criar LLM
-    llm = criar_llm(api_key, model_name)
+    llm = criar_llm()      # Usa GOOGLE_API_KEY diretamente
+
+    # =========================================================
+    # Modo OpenRouter (COMENTADO) - basta descomentar e comentar as linhas acima
+    # =========================================================
+    # print("\n⚙️  Carregando configuração...")
+    # api_key, model_name = carregar_config()
+    # llm = criar_llm(api_key, model_name)
 
     # Timestamp único para esta execução
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

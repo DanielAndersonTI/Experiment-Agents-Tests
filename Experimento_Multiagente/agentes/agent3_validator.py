@@ -61,36 +61,27 @@ def criar_task_consolidacao(agente):
         description="""
         Compare the two architecture proposals below and generate a consolidated version.
 
-        IMPORTANT RULES FOR CONSOLIDATION:
-        - Prefer services that appear in BOTH proposals (they are highly likely to be correct).
-        - If a service appears in only one proposal, include it ONLY if it is clearly grounded in the requirements.
-        - Do NOT add new services that were not in either proposal.
-        - Do NOT add infrastructure services (gateway, config, discovery, admin) unless they are present in BOTH proposals.
-        - Choose the simplest, most generic service name when merging similar services.
-        - Aim to maximize precision: only include services that are necessary to cover the requirements.
+CRITICAL FORMAT RULES:
+- Your ENTIRE output must begin with the exact line:
+  === CONSOLIDATED ARCHITECTURE ===
+- Then output one CSV line per service with these columns:
+  Microservice,Responsibilities,Communicates With,Source
+- After the last service, output the line:
+  === DECISIONS ===
+- Then add bullet-point explanations (one per line, starting with "- ").
+- Do NOT add any other text, no markdown code blocks, no extra commentary.
+- If the two architectures are completely identical (same services, same interactions),
+  simply output the same architecture with Source column "A+B" for every service,
+  and in DECISIONS state: "Both proposals are identical; no consolidation needed."
+- Never generate content unrelated to microservice architecture.
 
-        ARCHITECTURE A (Traditional DDD approach):
-        {architecture_a}
+ARCHITECTURE A:
+{architecture_a}
 
-        ARCHITECTURE B (Alternative approach):
-        {architecture_b}
-
-        Your output MUST be in this format:
-        === CONSOLIDATED ARCHITECTURE ===
-        Microservice,Responsibilities,Communicates With,Source
-        Service Name,resp1;resp2,ServiceX;ServiceY,A+B
-
-        === DECISIONS ===
-        - Service X: Kept from both proposals because...
-        - Service Y: Merged from A's name and B's responsibilities because...
-        - Service Z: Added from B only because...
-
-        Rules:
-        - Include a 'Source' column indicating where each service came from (A, B, or A+B)
-        - Explain key decisions
-        - Be specific about why certain services were kept, merged, or discarded
-        """,
-        expected_output="Consolidated architecture with decisions explained",
-        agent=agente,
-    )
+ARCHITECTURE B:
+{architecture_b}
+""",
+    expected_output="Consolidated architecture CSV with decisions",
+    agent=agente,
+)
     return task

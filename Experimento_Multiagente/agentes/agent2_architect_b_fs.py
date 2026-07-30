@@ -68,6 +68,7 @@ CRITICAL RULES:
 - List ALL communications that are plausible, even if they seem indirect. Your priority is RECALL of interactions without sacrificing PRECISION.
   (Example: If a user story says "customer adds items to cart", then Cart Service must communicate with Customer Service or Auth Service to identify the customer, so include that link.)
 - In the PetClinic domain, a visit is always for a pet that belongs to a client. Therefore, Visit Service MUST communicate with Customer Service (or Client Service) to retrieve client and pet information. Include this link.
+- The authentication/authorization service (if present, e.g., Auth Service) should communicate primarily with the service that manages user accounts (e.g., Customer Service). Avoid adding direct communication links from the Auth Service to every other business service (Cart, Order, Payment, Delivery, Product, etc.), unless a user story explicitly requires that specific interaction. In general, services validate tokens or permissions without calling the Auth Service synchronously for each request.
 - Use the CSV format exactly as shown in the example: Microservice,Responsibilities,Communicates With
 - Separate responsibilities with semicolons, services in 'Communicates With' also with semicolons.
 - Output nothing else besides the CSV (and optional comment lines starting with '#').
