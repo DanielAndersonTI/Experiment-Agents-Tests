@@ -9,7 +9,7 @@ venv_exp/
 # Variáveis de ambiente sensíveis
 # ==============================
 .env
-# (!) NÃO ignore .env.example – ele serve de modelo
+# NOTA: .env.example NÃO deve ser adicionado aqui para que sirva de modelo no repositório
 
 # ==============================
 # Python
@@ -26,12 +26,12 @@ build/
 # Jupyter / Notebooks
 # ==============================
 .ipynb_checkpoints/
-*.ipynb
 
 # ==============================
 # Resultados de experimentos
 # ==============================
 result/
+results/
 
 # ==============================
 # IDE / Editor
