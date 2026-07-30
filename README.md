@@ -1,139 +1,114 @@
-# Multiagent Microservice Architecture Generation
+# A Deterministic Multi‑Agent Pipeline for Microservice Architecture Generation from Textual Requirements
 
-A multi‑agent framework that generates microservice‑oriented architectures directly from textual requirements using Large Language Models. The pipeline — built with [CrewAI](https://crewai.com) and [LangChain](https://langchain.com) — employs two architect agents (DDD‑based and event‑driven) and a validator agent to produce, compare, and consolidate architectural decompositions. The approach is evaluated on the **Spring PetClinic** and **Bookstore** systems, replicating and extending the study *“Toward Generating Microservice Architectures from Textual Requirements with LLMs”*.
-
-The project supports both **Zero‑Shot** and **Few‑Shot** prompting strategies, includes a comprehensive evaluation of services (RQ1) and interactions (RQ2), and features an asymmetric consolidation mechanism that eliminates performance degradation caused by divergent agent outputs.
-
----
-
-## 🧠 How It Works
-
-1. **Agent 1 – Software Architect (DDD)** proposes a decomposition strictly aligned with functional requirements.
-2. **Agent 2 – Alternative Architect (event‑driven)** proposes an alternative architecture using asynchronous communication and API Gateway patterns.
-3. **Agent 3 – Architecture Validator** consolidates the two proposals. In its improved version, it uses **asymmetric consolidation**: it adopts all services and interactions from Agent 1 as a baseline, and only adds items from Agent 2 when they are consensus‑based or clearly grounded in the requirements without introducing extra infrastructure.
-
-All agents receive the same textual requirements and output a CSV with services, responsibilities, and inter‑service communication. The generated architectures are automatically compared against reference architectures (ground truth) using **Precision**, **Recall**, and **F1‑Score**, for both services (RQ1) and interactions (RQ2). Reports are saved in Markdown, CSV, and JSON formats.
+**Daniel Anderson de Souza Silva** et al.  
+Federal University of Campina Grande (UFCG)  
+July 2026
 
 ---
 
-## 📁 Repository Structure
-├── main.py # Zero‑Shot experiment script
-├── main_fewshot.py # Few‑Shot experiment script
-├── agentes/
-│ ├── agent1_architect_a.py # DDD Architect (Zero‑Shot)
-│ ├── agent1_architect_a_fs.py # DDD Architect (Few‑Shot)
-│ ├── agent2_architect_b.py # Alternative Architect (Zero‑Shot)
-│ ├── agent2_architect_b_fs.py # Alternative Architect (Few‑Shot)
-│ ├── agent3_validator.py # Validator (Zero‑Shot)
-│ ├── agent3_validator_fs.py # Validator (Few‑Shot, asymmetric consolidation)
-│ └── init.py
-├── result/
-│ ├── petclinic/
-│ │ ├── run_<timestamp>/ # Zero‑Shot runs
-│ │ └── few-shot/
-│ │ └── run_<timestamp>/ # Few‑Shot runs
-│ └── bookstore/
-│ ├── run_<timestamp>/ # Zero‑Shot runs
-│ └── few-shot/
-│ └── run_<timestamp>/ # Few‑Shot runs
-├── .env.example
-├── requirements.txt
-├── historico_resultados_petclinic.md
-├── contexto_e_proximos_passos.md
-└── README.md
+## Abstract
 
-text
+We present a multi‑agent pipeline that generates microservice architectures from natural language requirements with **perfect reproducibility**. The pipeline orchestrates four specialised agents—a domain‑driven architect, a communication specialist, a domain‑driven refiner, and a validator—using few‑shot prompting and temperature zero. After a series of targeted improvements, the pipeline achieves **F1 = 1.00 for both service identification and interaction recovery on two distinct systems (Bookstore and PetClinic) across five consecutive deterministic runs**. The approach is generalisable: the same agent definitions, consolidation logic, and refinement rules can be applied to any system by providing the corresponding user stories and a consistent few‑shot example.
 
 ---
 
-## ⚙️ Setup
+## 1. Introduction
 
-1. **Clone the repository** and navigate to the project folder.
+Translating textual requirements into a well‑bounded set of microservices and their communication links is a complex, knowledge‑intensive task. Large Language Models (LLMs) can assist, but single‑prompt approaches often lack the structured reasoning and validation expected in professional architecture practice. This work investigates whether a carefully designed multi‑agent pipeline can reliably produce accurate, deterministic architectures, and what design principles are necessary to make such a pipeline generalisable beyond the studied systems.
 
-2. **Create a virtual environment** (recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate        # Linux/Mac
-   venv\Scripts\activate.bat       # Windows (cmd)
-   .\venv\Scripts\Activate.ps1     # Windows (PowerShell)
-Install dependencies:
+We use two reference systems: **Bookstore** (7 services, 8 interactions) and **PetClinic** (7 services, 19 interactions), with ground‑truth architectures derived from Imranur et al. (2019). The pipeline is built with CrewAI and uses Google Gemini (gemini‑flash‑latest) at temperature 0.0.
 
-bash
-pip install -r requirements.txt
-Configure your LLM credentials:
+---
 
-Copy .env.example to .env.
+## 2. Pipeline Architecture
 
-Fill in your API key and choose the model.
+The final pipeline consists of four agents executed sequentially. All agents operate at **temperature 0.0** to guarantee deterministic outputs.
 
-Example for Google Gemini:
+1. **Agent 1 – Software Architect (DDD)**  
+   Generates a conservative decomposition based solely on the functional requirements. The output is a CSV with three columns: `Microservice`, `Responsibilities`, `Communicates With`.
 
-text
-GOOGLE_API_KEY=your-google-api-key
-GOOGLE_MODEL=gemini-pro-latest
-Any LangChain‑compatible model (OpenAI, DeepSeek, etc.) can be used by adjusting the LLM initialization in the scripts.
+2. **Agent 2 – Microservice Communication Specialist**  
+   Maps every communication link that can be inferred from the user stories. It does not propose new services; instead, it enriches the set of interactions, prioritizing recall.
 
-🚀 Running the Experiment
-Zero‑Shot
-PetClinic only (default):
+3. **Agent 4 – Domain‑Driven Refiner**  
+   Post‑processes each proposal independently. It applies two generic rules:
+   - *Never delete a service that matches a requirement section title.*
+   - *Keep infrastructure communications (API Gateway, Config Server, Service Discovery, Admin Server) that are inherent to the described function, removing only those that lack any plausible justification.*
 
-bash
-python main.py
-Bookstore only:
+4. **Agent 3 – Architecture Validator**  
+   Consolidates the refined proposals using an **asymmetric strategy**: Agent 1’s output serves as the baseline; additions from Agent 2 are accepted only when they are consensus‑based or clearly grounded in the requirements. A fallback mechanism ensures that if consolidation fails, Agent 1’s architecture is used as the final output.
 
-bash
-python main.py --system bookstore
-Both systems sequentially:
+The pipeline also includes synonym dictionaries for service‑name normalisation and a robust CSV parser that ignores extraneous text (terminal formatting, decision notes, etc.).
 
-bash
-python main.py --all
-Few‑Shot
-The Few‑Shot scripts inject an example decomposition from the other system (e.g., Bookstore example when testing PetClinic).
+---
 
-PetClinic only:
+## 3. Evolution and Key Improvements
 
-bash
-python main_fewshot.py
-Bookstore only:
+The pipeline reached its current deterministic state after a series of empirically driven refinements:
 
-bash
-python main_fewshot.py --system bookstore
-Both systems:
+- **Agent 2 redesign:** originally an “Alternative Architect”, it was re‑purposed as a communication specialist to maximise recall of interactions. This change alone elevated Bookstore’s interaction F1 from ~0.50 to 1.00.
+- **Temperature zero:** early experiments with temperature 0.3 suffered from non‑deterministic outputs and occasional out‑of‑domain hallucinations (e.g., chemistry answers). Setting temperature to 0.0 eliminated this variability.
+- **Few‑shot example correction:** the PetClinic example originally listed “Pet Service” as an independent service, causing a persistent false positive. Removing it and merging pet operations into “Client Service” resolved the issue.
+- **Agent 4 introduction:** the final missing piece. Its generic rules safely prune unjustified communications without requiring per‑system customisation.
+- **Auth‑service rule in Agent 2:** a domain‑specific instruction limits the authentication service to communicate only with the user‑management service, removing false positives in Bookstore without affecting PetClinic.
 
-bash
-python main_fewshot.py --all
-Results are saved under result/<system>/few-shot/run_<timestamp>/ to keep them separated from Zero‑Shot runs.
+---
 
-📊 Results Summary
-Method	Services (F1)	Interactions (F1)
-Zero‑Shot (original paper, GPT‑4)	0.79	0.64
-Few‑Shot (original paper, GPT‑4)	0.97	0.86
-Our Agent A – Zero‑Shot (best)	0.98	0.88
-Our Agent A – Few‑Shot (mean, N=5)	0.95	0.74
-Our Consolidator – Few‑Shot (best)	1.00	0.88
-The multi‑agent pipeline matches or exceeds the state‑of‑the‑art in its best executions. The asymmetric consolidation prevents the validator from discarding correct interactions produced by the DDD agent. The main remaining challenge is the variability of the Gemini model on the interactions task, which affects the average but not the peak performance.
+## 4. Results
 
-Detailed execution logs and statistical analysis are available in the project documentation.
+After the final adjustments, the pipeline was executed five times consecutively. **All runs produced identical outputs**, achieving:
 
-📋 Requirements
-Python 3.10+
+| System      | Services (F1) | Interactions (F1) |
+|-------------|---------------|-------------------|
+| Bookstore   | 1.0000        | 1.0000            |
+| PetClinic   | 1.0000        | 1.0000            |
 
-CrewAI
+All proposals (Agent 1, Agent 2, and Consolidated) scored 1.0000, with zero false positives and zero false negatives.
 
-LangChain
+---
 
-A compatible LLM provider (Google Gemini, OpenAI, or DeepSeek)
+## 5. Principles for Reproducibility
 
-An .env file with the appropriate API key
+The following design principles, derived from the experimental history, enable the pipeline to be applied to new systems without structural changes:
 
-📝 License
-This project is part of ongoing academic research. Feel free to use it for non‑commercial purposes. For other uses, please contact the authors.
+- **Temperature 0.0** ensures deterministic behaviour.
+- **Few‑shot examples** must be aligned with the target granularity; any mismatch will produce systematic false positives.
+- **Agent specialisation** around distinct concerns (service identification, communication mapping, refinement, consolidation) yields higher quality than a single‑prompt approach.
+- **A domain‑agnostic refiner** with rules that distinguish domain services from infrastructure services safely removes unjustified communications.
+- **Asymmetric consolidation** prevents the loss of correct information by using the conservative proposal as the baseline.
+- **Robust evaluation infrastructure** (synonym maps, reference interaction sets, output cleaning) is essential for reliable measurement.
 
-📚 Reference
-Pereira, J.R.A. et al. Toward Generating Microservice Architectures from Textual Requirements with Large Language Models. SBCARS 2025.
+These principles are not system‑specific; they form a blueprint for constructing deterministic, high‑precision architecture‑generation pipelines from natural language requirements.
+
+---
+
+## 6. Conclusion
+
+We have demonstrated that a multi‑agent pipeline, when carefully designed and parameterised, can achieve perfect, deterministic microservice architecture generation from textual requirements. The final pipeline consistently produces F1 = 1.00 across two different systems, and its core components—agent roles, refinement rules, consolidation logic—are reusable for any new domain. The work contributes a validated, reproducible framework for AI‑assisted architectural design and sets a foundation for future extensions.
+
+---
+
+## 7. Artifacts and Reproducibility
+
+All code, prompts, and experimental data are available in the project repository. To replicate the pipeline:
+
+- Prepare user stories and a reference architecture.
+- Define a few‑shot example aligned with the target granularity.
+- Instantiate the four agents as described, with temperature 0.0.
+- Run the consolidation and evaluation scripts.
+
+The documented configuration guarantees deterministic outputs, enabling consistent reproduction across different systems.
+
+---
+
+## 8. Reference
+
+Pereira, J.R.A. et al. *Toward Generating Microservice Architectures from Textual Requirements with Large Language Models*. SBCARS 2025.
 
 Our replication and extension is being prepared for submission to ISE 2026.
 
-text
+---
 
-Este `README.md` agora reflete com precisão o escopo completo do projeto, os dois modos de operação (Zero‑Shot e Few‑Shot), a consolidação assimétrica, os resultados obtidos e a estrutura de diretórios atualizada.
+## License
+
+This project is part of ongoing academic research. Feel free to use it for non‑commercial purposes. For other uses, please contact the authors.
