@@ -111,4 +111,4 @@ Our replication and extension is being prepared for submission to ISE 2026.
 
 ## License
 
-This project is part of ongoing academic research. Feel free to use it for non‑commercial purposes. For other uses, please contact the authors.
+The source code of this repository is released under the **MIT License**. See the [`LICENSE`](LICENSE) file for the full text.
